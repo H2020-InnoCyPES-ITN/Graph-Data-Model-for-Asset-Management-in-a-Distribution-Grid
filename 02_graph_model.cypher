@@ -1,5 +1,5 @@
-// Extended Cypher Script for MV Cable Network Graph Model (Denmark Use)
-// Adding explanations
+// Cypher Script for MV Cable Network Graph Model (Denmark Use)
+// TODO: Adding explanations and confirm the tests
 
 
 // --- Create Constraints for Unique Identifiers ---
