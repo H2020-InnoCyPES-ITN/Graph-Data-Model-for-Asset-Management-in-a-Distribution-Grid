@@ -147,3 +147,6 @@ Finally, the LocationDriver node has a driverID (Integer) to uniquely identify e
 | `INFLUENCES`     | *(none)*                                                                        | `LocationDriver → MVCSubsection`                     | Models static environmental impacts on cables, independent of failures.                                 |
 | `CAUSED_BY`      | `spatialOverlapPercentage: Float`, `timeOverlap: Boolean`                       | `CableEvent (failure) → ExternalEvent (e.g., DiggingActivity)` | Indicates causes of cable failures, with spatial and temporal context.                   |
 | `PARENT_OF`      | *(none)*                                                                        | `Substation (main) → Substation (secondary)`         | Enables grouping of secondary substations under a main substation.                                      |
+
+
+# CIM-Based Model
