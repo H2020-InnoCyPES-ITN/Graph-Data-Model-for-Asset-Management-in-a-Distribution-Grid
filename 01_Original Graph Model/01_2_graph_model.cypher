@@ -96,7 +96,7 @@ CREATE (ce3:CableEvent {kind: "cable_failure", id: 3, eventStart: date("2024-01-
 CREATE (ce4:CableEvent {kind: "cable_failure", id: 4, eventStart: date("2024-06-01"), eventEnd: date("2024-06-02"), locationOfEvent: "POINT(12.550 55.690)", failureType: "Joint Failure", failureCause: "Aging"})
 CREATE (ce5:CableEvent {kind: "cable_repair", id: 5, eventStart: date("2023-05-12"), eventEnd: date("2023-05-12"), locationOfEvent: "POINT(12.555 55.685)", repairSpecs: "Replaced damaged section", relatedFailureId: 1})
 CREATE (ce6:CableEvent {kind: "cable_repair", id: 6, eventStart: date("2023-07-17"), eventEnd: date("2023-07-17"), locationOfEvent: "POINT(12.545 55.695)", repairSpecs: "Repaired insulation", relatedFailureId: 2})
-// Create failures
+
 FOREACH (i IN range(7, 200) |
   CREATE (:CableEvent {
     kind: "cable_failure",
@@ -120,6 +120,7 @@ FOREACH (i IN range(7, 200) |
       ELSE "High Load" END
   })
 )
+
 // Create repairs (for 150 failures, approximately 75% of failures)
 MATCH (ce:CableEvent {kind: "cable_failure"})
 WHERE ce.id <= 156
@@ -197,7 +198,10 @@ FOREACH (i IN range(6, 50) |
       WHEN 0 THEN "LINESTRING(" + (9.8 + rand() * 3.0) + " " + (55.0 + rand() * 2.5) + ", " + (9.8 + rand() * 3.0) + " " + (55.0 + rand() * 2.5) + ")"
       WHEN 1 THEN "LINESTRING(" + (9.8 + rand() * 3.0) + " " + (55.0 + rand() * 2.5) + ", " + (9.8 + rand() * 3.0) + " " + (55.0 + rand() * 2.5) + ")"
       ELSE "MULTIPOLYGON((" + (9.8 + rand() * 3.0) + " " + (55.0 + rand() * 2.5) + ", ...))" END,
-    lengthInKm: CASE toInteger(rand() * 5) IN [0, 1] THEN 1.0 + rand() * 5.0 ELSE NULL END,
+    lengthInKm: CASE 
+  WHEN toInteger(rand() * 5) = 0 THEN 1.0 + rand() * 5.0 
+  WHEN toInteger(rand() * 5) = 1 THEN 1.0 + rand() * 5.0 
+  ELSE NULL END,
     timeGranularity: CASE toInteger(rand() * 5) WHEN 4 THEN "yearly" ELSE NULL END,
     averageTemperature: CASE toInteger(rand() * 5) WHEN 4 THEN 7.0 + rand() * 3.0 ELSE NULL END,
     averageWindSpeed: CASE toInteger(rand() * 5) WHEN 4 THEN 4.0 + rand() * 3.0 ELSE NULL END,
@@ -245,12 +249,22 @@ MATCH (m:MVCSystem)
 WITH m, toInteger(rand() * 8 + 3) AS numSubsections
 MATCH (ms:MVCSubsection)
 WHERE rand() < 0.02
-LIMIT numSubsections
+WITH m, numSubsections, collect(ms) AS msList
+WITH m, apoc.coll.randomItems(msList, numSubsections, false) AS selectedMs
+UNWIND selectedMs AS ms
 CREATE (m)-[:CONTAINS {connectionDate: date("2010-01-01") + duration({years: toInteger(rand() * 10)})}]->(ms);
 
 // CableJoint JOINS MVCSubsection (connect pairs of subsections)
-MATCH (ms1:MVCSubsection), (ms2:MVCSubsection), (j:CableJoint)
-WHERE ms1.id < ms2.id AND rand() < 0.01
+MATCH (ms:MVCSubsection)
+WITH collect(ms) AS subs
+UNWIND range(0, size(subs) - 2) AS i
+UNWIND range(i + 1, size(subs) - 1) AS j
+WITH subs[i] AS ms1, subs[j] AS ms2
+WHERE rand() < 0.001  // Even lower, to avoid memory issues
+WITH ms1, ms2
+LIMIT 100  // Cap the number of joints to avoid OOM
+
+CREATE (j:CableJoint)
 CREATE (j)-[:JOINS {position: "first", joinedOn: date("2010-01-01") + duration({years: toInteger(rand() * 10)})}]->(ms1)
 CREATE (j)-[:JOINS {position: "second", joinedOn: date("2010-01-01") + duration({years: toInteger(rand() * 10)})}]->(ms2);
 
@@ -283,78 +297,11 @@ WHERE rand() < 0.05
 CREATE (ld)-[:CONTRIBUTES_TO {spatialOverlapPercentage: 0.3 + rand() * 0.7, timeOverlap: true}]->(ce);
 
 // --- Update Derived Properties ---
-MATCH (m:MVCSystem)
-SET m.numberOfSubsections = SIZE([(m)-[:CONTAINS]->(ms) | ms]),
-    m.lengthInKm = COALESCE(SUM([(m)-[:CONTAINS]->(ms) | ms.lengthInKm]), 0.0);
+MATCH (m:MVCSystem)-[:CONTAINS]->(ms:MVCSubsection)
+WITH m, COUNT(ms) AS subsectionCount, SUM(ms.lengthInKm) AS totalLength
+SET m.numberOfSubsections = subsectionCount,
+    m.lengthInKm = COALESCE(totalLength, 0.0);
 
 MATCH (ms:MVCSubsection)
-SET ms.numberOfJoints = SIZE([(ms)<-[:JOINS]-() | 1]);
-
-// --- Testing Queries for Use Cases ---
-
-// Use Case 1: Which DSO operates an MV Cable System?
-MATCH (d:DSO)-[:OPERATES]->(m:MVCSystem)
-RETURN d.name, m.name
-LIMIT 10;
-
-// Use Case 3: How many failures occurred in a given year?
-MATCH (ce:CableEvent {kind: "cable_failure"})
-WHERE ce.eventStart.year = 2023
-RETURN COUNT(ce) AS failure_count;
-
-// Use Case 4: Which DSO had the most failures?
-MATCH (d:DSO)-[:OPERATES]->(m:MVCSystem)-[:CONTAINS]->(ms:MVCSubsection)<-[:AFFECTS]-(ce:CableEvent {kind: "cable_failure"})
-RETURN d.name, COUNT(ce) AS failure_count
-ORDER BY failure_count DESC
-LIMIT 5;
-
-// Use Case 5: What are the leading factors for most failures?
-MATCH (ce:CableEvent {kind: "cable_failure"})
-OPTIONAL MATCH (ce)-[:CAUSED_BY]->(ee:ExternalEvent)
-RETURN ce.failureCause, ee.kind AS external_event, COUNT(*) AS failure_count
-ORDER BY failure_count DESC
-LIMIT 10;
-
-// Use Case 7: Give maintenance record for a certain component
-MATCH (ms:MVCSubsection {id: 1})<-[:AFFECTS]-(ce:CableEvent {kind: "cable_repair"})
-RETURN ce.eventStart, ce.repairSpecs, ce.relatedFailureId
-ORDER BY ce.eventStart;
-
-// Use Case 9: Were certain activities reported to the responsible authorities?
-MATCH (ee:ExternalEvent {kind: "DiggingActivity"})
-RETURN ee.eventId, ee.diggingType, ee.reportedToAuthority
-LIMIT 10;
-
-// Use Case 12: What is the coverage area of a DSO
-MATCH (d:DSO)
-RETURN d.name, d.supplyArea
-LIMIT 5;
-
-// Use Case 14: What cable types are mostly affected by digging activities?
-MATCH (ee:ExternalEvent {kind: "DiggingActivity"})-[:IMPACTS]->(ms:MVCSubsection)
-RETURN ms.conductorType, COUNT(*) AS impact_count
-ORDER BY impact_count DESC;
-
-// Use Case 15: Are there specific cable materials that lead to most of the failures?
-MATCH (ms:MVCSubsection)<-[:AFFECTS]-(ce:CableEvent {kind: "cable_failure"})
-RETURN ms.conductorMaterial, COUNT(ce) AS failure_count
-ORDER BY failure_count DESC;
-
-// Use Case 19: What weather conditions are associated with most failures?
-MATCH (ce:CableEvent {kind: "cable_failure"})-[:CAUSED_BY]->(ee:ExternalEvent)
-WHERE ee.kind IN ["Flood", "HeatWave", "ColdWave"]
-RETURN ee.kind, ee.maxTemperature, ee.maxPrecipitation, COUNT(*) AS failure_count
-ORDER BY failure_count DESC;
-
-// Use Case 20: Do cables with many joints fail more than those with few joints?
-MATCH (ms:MVCSubsection)
-OPTIONAL MATCH (ms)<-[:AFFECTS]-(ce:CableEvent {kind: "cable_failure"})
-RETURN ms.numberOfJoints, COUNT(ce) AS failure_count
-ORDER BY ms.numberOfJoints
-LIMIT 20;
-
-// Use Case 21: What distance of the cable system was affected?
-MATCH (m:MVCSystem)-[:CONTAINS]->(ms:MVCSubsection)<-[:AFFECTS]-(ce:CableEvent {kind: "cable_failure"})
-RETURN m.name, SUM(ms.lengthInKm) AS affected_length_km
-ORDER BY affected_length_km DESC
-LIMIT 10;
+WITH ms, SIZE([(ms)<-[:JOINS]-(:CableJoint) | 1]) AS jointCount
+SET ms.numberOfJoints = jointCount;
