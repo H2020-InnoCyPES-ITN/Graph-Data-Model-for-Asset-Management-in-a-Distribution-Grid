@@ -1,6 +1,4 @@
-// Cypher Script for MV Cable Network Graph Model (Denmark Use)
-// TODO: Adding explanations and confirm the tests
-
+// Cypher Script for MV Cable Network Graph Model )
 
 // --- Create Constraints for Unique Identifiers ---
 CREATE CONSTRAINT IF NOT EXISTS FOR (d:DSO) REQUIRE d.name IS UNIQUE;
