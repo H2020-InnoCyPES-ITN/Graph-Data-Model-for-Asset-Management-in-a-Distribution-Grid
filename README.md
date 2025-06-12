@@ -1,5 +1,5 @@
 # Graph-Data-Model-to-Facilitate-Reliability-Studies-of-Medium-Voltage-Cable-Systems-in-a-Distribution-Grid
-A Neo4j-based graph data model to facilitate reliability studies of medium-voltage cables in a distribution grid. This model is a continuation of our previous relational data model presented in [1]. In this regard, the current model is designed to be able to respond to the following query requirements.
+This repository presents a graph data model to facilitate reliability studies of medium-voltage cables in a distribution grid. We present the models in two fold; first a graph model which is the results of a relational data model that was designed to facilitate decentralised data storage for MV cables [1]. This graph model is described in detail in [Data Model Folder](/01_Original_Graph_Model). Second, its refinement to align with CIM/IEC standard is presentend in folder [Refined Data Model Folder](/02_Alignment_to_CIM_and_IEC_Standards). We use Neo4j database for designing the model, populating it, and run test queries. In this regard, the current model is designed to respond to the following query requirements.
 
 ## Important use cases
 1.	Which DSO operates an MV Cable System?
