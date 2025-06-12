@@ -26,6 +26,11 @@ This repository presents a graph data model to facilitate reliability studies of
 
 The extent to which the model respond to various queries is not limited to the presented use cases. Many more queries, including aggregation of data can also be done.
 
+To use:
+1. Install Neo4j with spatial data support.
+2. Run the Cypher script to create nodes, relationships, and indexes.
+3. Execute testing queries to validate use cases.
+
 ## References
 1. K. Sundsgaard, L. J. Mwinuka, M. Cafaro, J. Z. Hansen and G. Yang, "A Decentralised Relational Data Model for Reliability Studies of Medium-Voltage Cables," 2024 IEEE PES Innovative Smart Grid Technologies Europe (ISGT EUROPE), Dubrovnik, Croatia, 2024, pp. 1-5, doi: 10.1109/ISGTEUROPE62998.2024.10863105.
 
