@@ -1,1 +1,3 @@
 
+
+To better model data for the reliability of the MV cable network and failure data, a combination of three datasets is needed. First, since we track the failure of cables, asset records are required (as specified in IEC 61968-4). Second, components will be maintained, repaired, and some will be built. In such cases, maintenance and construction records (as specified in IEC 61968-6) are required. Third, the cable system is connected through substations, which have joints or junctions, and subsections that belong to IEC 61968-11. Hence, our graph data model will take into consideration these standards to ensure correctness and support scalability.
