@@ -14,7 +14,8 @@ CREATE CONSTRAINT IF NOT EXISTS FOR (m:Measurement) REQUIRE m.mRID IS UNIQUE;
 // --- Create Indexes for Performance ---
 CREATE INDEX IF NOT EXISTS FOR (fe:FailureEvent) ON (fe.startTime, fe.eventType);
 CREATE INDEX IF NOT EXISTS FOR (wo:WorkOrder) ON (wo.startTime, wo.eventType);
-CREATE INDEX IF NOT EXISTS FOR (ls:ACLineSegment) ON (ls.assetInfo.conductorType, ls.assetInfo.conductorMaterial);
+// Index on ACLineSegment is not possible for nested properties; consider indexing on top-level properties if needed
+// CREATE INDEX IF NOT EXISTS FOR (ls:ACLineSegment) ON (ls.assetInfo.conductorType, ls.assetInfo.conductorMaterial);
 CREATE INDEX IF NOT EXISTS FOR (ar:ActivityRecord) ON (ar.eventType, ar.startTime);
 
 // --- Create Sample Data ---
@@ -158,9 +159,10 @@ FOREACH (i IN range(5, 200) |
       ELSE "High Load" END
   })
 )
+
 MATCH (fe:FailureEvent)
 WHERE fe.mRID <= "FE156"
-WITH fe, "WO" + right(fe.mRID, length(fe.mRID)-2) AS woMRID
+WITH fe, "WO" + substring(fe.mRID, 2) AS woMRID
 CREATE (wo:WorkOrder {
   mRID: woMRID,
   eventType: "CableRepair",
@@ -175,74 +177,228 @@ CREATE (wo:WorkOrder {
     ELSE "General repair" END,
   relatedFailureId: fe.mRID
 })
-CREATE (wo)-[:REPAIRS {mRID: "R" + woMRID, repairDate: wo.startTime, workOrderId: woMRID}]->(fe);
+CREATE (wo)-[:REPAIRS {
+  mRID: "R" + substring(fe.mRID, 2),
+  repairDate: fe.endTime + duration({days: 1}),
+  workOrderId: woMRID
+}]->(fe);
+
 
 // ActivityRecords (100 external events: digging, lightning, floods, heatwaves, cold waves)
-CREATE (ar1:ActivityRecord {mRID: "AR1", eventType: "DiggingActivity", startTime: date("2023-05-09"), endTime: date("2023-05-10"), location: "POLYGON((12.554 55.684, 12.556 55.686, ...))", attributes: {utilityType: "Water", diggingType: "Pipeline Installation", reportedToAuthority: "Copenhagen Municipality"}})
-CREATE (ar2:ActivityRecord {mRID: "AR2", eventType: "Lightning", startTime: date("2023-07-15"), endTime: date("2023-07-15"), location: "POINT(12.545 55.695)", attributes: {impactTime: datetime("2023-07-15T14:30:00"), numberOfStroke: 3, intensity: 100.0}})
-CREATE (ar3:ActivityRecord {mRID: "AR3", eventType: "Flood", startTime: date("2024-01-19"), endTime: date("2024-01-23"), location: "MULTIPOLYGON((10.200 56.150, 10.210 56.165, ...))", attributes: {maxPrecipitation: 150.0}})
-CREATE (ar4:ActivityRecord {mRID: "AR4", eventType: "HeatWave", startTime: date("2023-08-01"), endTime: date("2023-08-05"), location: "MULTIPOLYGON((12.5 55.6, 12.6 55.7, ...))", attributes: {maxTemperature: 32.0, minTemperature: 20.0}})
-CREATE (ar5:ActivityRecord {mRID: "AR5", eventType: "ColdWave", startTime: date("2024-02-10"), endTime: date("2024-02-15"), location: "MULTIPOLYGON((10.0 56.0, 10.3 56.3, ...))", attributes: {maxTemperature: -5.0, minTemperature: -15.0}})
-FOREACH (i IN range(6, 100) |
-  CREATE (ar:ActivityRecord {
+// Create the first 5 ActivityRecords
+CREATE (ar1:ActivityRecord {
+  mRID: "AR1",
+  eventType: "DiggingActivity",
+  startTime: date("2023-05-09"),
+  endTime: date("2023-05-10"),
+  location: "POLYGON((12.554 55.684, 12.556 55.686, ...))",
+  utilityType: "Water",
+  diggingType: "Pipeline Installation",
+  reportedToAuthority: "Copenhagen Municipality"
+})
+
+CREATE (ar2:ActivityRecord {
+  mRID: "AR2",
+  eventType: "Lightning",
+  startTime: date("2023-07-15"),
+  endTime: date("2023-07-15"),
+  location: "POINT(12.545 55.695)",
+  impactTime: datetime("2023-07-15T14:30:00"),
+  numberOfStroke: 3,
+  intensity: 100.0
+})
+
+CREATE (ar3:ActivityRecord {
+  mRID: "AR3",
+  eventType: "Flood",
+  startTime: date("2024-01-19"),
+  endTime: date("2024-01-23"),
+  location: "MULTIPOLYGON((10.200 56.150, 10.210 56.165, ...))",
+  maxPrecipitation: 150.0
+})
+
+CREATE (ar4:ActivityRecord {
+  mRID: "AR4",
+  eventType: "HeatWave",
+  startTime: date("2023-08-01"),
+  endTime: date("2023-08-05"),
+  location: "MULTIPOLYGON((12.5 55.6, 12.6 55.7, ...))",
+  maxTemperature: 32.0,
+  minTemperature: 20.0
+})
+
+CREATE (ar5:ActivityRecord {
+  mRID: "AR5",
+  eventType: "ColdWave",
+  startTime: date("2024-02-10"),
+  endTime: date("2024-02-15"),
+  location: "MULTIPOLYGON((10.0 56.0, 10.3 56.3, ...))",
+  maxTemperature: -5.0,
+  minTemperature: -15.0
+})
+
+// Insert dummy WITH clause before UNWIND
+WITH true AS dummy
+
+// Generate AR6 to AR100
+UNWIND range(6, 100) AS i
+WITH i,
+  CASE toInteger(rand() * 5)
+    WHEN 0 THEN "DiggingActivity"
+    WHEN 1 THEN "Lightning"
+    WHEN 2 THEN "Flood"
+    WHEN 3 THEN "HeatWave"
+    ELSE "ColdWave"
+  END AS eventType,
+  date("2020-01-01") + duration({days: toInteger(rand() * 1825)}) AS startDate,
+  date("2020-01-01") + duration({days: toInteger(rand() * 1825) + toInteger(rand() * 7)}) AS endDate,
+  "MULTIPOLYGON((" + (9.8 + rand() * 3.0) + " " + (55.0 + rand() * 2.5) + ", ...))" AS location
+
+// DiggingActivity
+FOREACH (_ IN CASE WHEN eventType = "DiggingActivity" THEN [1] ELSE [] END |
+  CREATE (:ActivityRecord {
     mRID: "AR" + i,
-    eventType: CASE toInteger(rand() * 5)
-      WHEN 0 THEN "DiggingActivity"
-      WHEN 1 THEN "Lightning"
-      WHEN 2 THEN "Flood"
-      WHEN 3 THEN "HeatWave"
-      ELSE "ColdWave" END,
-    startTime: date("2020-01-01") + duration({days: toInteger(rand() * 1825)}),
-    endTime: date("2020-01-01") + duration({days: toInteger(rand() * 1825) + toInteger(rand() * 7)}),
-    location: "MULTIPOLYGON((" + (9.8 + rand() * 3.0) + " " + (55.0 + rand() * 2.5) + ", ...))",
-    attributes: CASE toInteger(rand() * 5)
-      WHEN 0 THEN {utilityType: "Water", diggingType: "Pipeline Installation", reportedToAuthority: CASE toInteger(rand() * 3) WHEN 0 THEN "Copenhagen Municipality" WHEN 1 THEN "Aarhus Municipality" ELSE NULL END}
-      WHEN 1 THEN {impactTime: datetime("2020-01-01T00:00:00") + duration({days: toInteger(rand() * 1825)}), numberOfStroke: toInteger(rand() * 5) + 1, intensity: 50.0 + rand() * 150.0}
-      WHEN 2 THEN {maxPrecipitation: 100.0 + rand() * 100.0}
-      WHEN 3 THEN {maxTemperature: 25.0 + rand() * 10.0, minTemperature: 15.0 + rand() * 10.0}
-      ELSE {maxTemperature: -5.0 + rand() * 10.0, minTemperature: -15.0 + rand() * 10.0} END
+    eventType: eventType,
+    startTime: startDate,
+    endTime: endDate,
+    location: location,
+    utilityType: "Water",
+    diggingType: "Pipeline Installation",
+    reportedToAuthority: CASE toInteger(rand() * 3)
+      WHEN 0 THEN "Copenhagen Municipality"
+      WHEN 1 THEN "Aarhus Municipality"
+      ELSE NULL END
   })
 )
 
+// Lightning
+FOREACH (_ IN CASE WHEN eventType = "Lightning" THEN [1] ELSE [] END |
+  CREATE (:ActivityRecord {
+    mRID: "AR" + i,
+    eventType: eventType,
+    startTime: startDate,
+    endTime: endDate,
+    location: location,
+    impactTime: datetime("2020-01-01T00:00:00") + duration({days: toInteger(rand() * 1825)}),
+    numberOfStroke: toInteger(rand() * 5) + 1,
+    intensity: 50.0 + rand() * 150.0
+  })
+)
+
+// Flood
+FOREACH (_ IN CASE WHEN eventType = "Flood" THEN [1] ELSE [] END |
+  CREATE (:ActivityRecord {
+    mRID: "AR" + i,
+    eventType: eventType,
+    startTime: startDate,
+    endTime: endDate,
+    location: location,
+    maxPrecipitation: 100.0 + rand() * 100.0
+  })
+)
+
+// HeatWave
+FOREACH (_ IN CASE WHEN eventType = "HeatWave" THEN [1] ELSE [] END |
+  CREATE (:ActivityRecord {
+    mRID: "AR" + i,
+    eventType: eventType,
+    startTime: startDate,
+    endTime: endDate,
+    location: location,
+    maxTemperature: 25.0 + rand() * 10.0,
+    minTemperature: 15.0 + rand() * 10.0
+  })
+)
+
+// ColdWave
+FOREACH (_ IN CASE WHEN eventType = "ColdWave" THEN [1] ELSE [] END |
+  CREATE (:ActivityRecord {
+    mRID: "AR" + i,
+    eventType: eventType,
+    startTime: startDate,
+    endTime: endDate,
+    location: location,
+    maxTemperature: -5.0 + rand() * 10.0,
+    minTemperature: -15.0 + rand() * 10.0
+  })
+)
+
+
 // Locations and Measurements (50 drivers: roads, railways, water bodies, soil types, weather)
-CREATE (l1:Location {mRID: "L1", locationType: "Road", locationAttributes: {lengthInKm: 2.0}, position: "LINESTRING(12.560 55.670, 12.550 55.690)"})
-CREATE (m2:Measurement {mRID: "M2", locationType: "WeatherCondition", measurementValues: {averageTemperature: 8.5, averageWindSpeed: 5.0, maxWindSpeed: 15.0, averageHumidity: 80.0, maxHumidity: 95.0, averagePrecipitation: 600.0, maxPrecipitation: 50.0, maxTemperature: 25.0, minTemperature: -5.0}, timeRangeStart: date("2023-01-01"), timeRangeEnd: date("2023-12-31"), position: "MULTIPOLYGON((12.5 55.6, 12.6 55.7, ...))"})
-CREATE (l3:Location {mRID: "L3", locationType: "Railway", locationAttributes: {lengthInKm: 3.0}, position: "LINESTRING(10.195 56.145, 10.215 56.170)"})
-CREATE (l4:Location {mRID: "L4", locationType: "WaterBody", locationAttributes: {}, position: "MULTIPOLYGON((10.190 56.140, 10.220 56.160, ...))"})
-CREATE (l5:Location {mRID: "L5", locationType: "SoilType", locationAttributes: {soilType: "Clay"}, position: "MULTIPOLYGON((12.540 55.680, 12.560 55.700, ...))"})
-FOREACH (i IN range(6, 50) |
-  CREATE (node:Location {mRID: "L" + i, locationType: CASE toInteger(rand() * 5) WHEN 0 THEN "Road" WHEN 1 THEN "Railway" WHEN 2 THEN "WaterBody" WHEN 3 THEN "SoilType" ELSE "WeatherCondition" END})
-  SET node.position = CASE toInteger(rand() * 5)
+// Initial 5 Locations and 1 Measurement
+
+CREATE (l1:Location {
+  mRID: "L1",
+  locationType: "Road",
+  lengthInKm: 2.0,
+  position: "LINESTRING(12.560 55.670, 12.550 55.690)"
+})
+
+CREATE (m2:Measurement {
+  mRID: "M2",
+  locationType: "WeatherCondition",
+  averageTemperature: 8.5,
+  averageWindSpeed: 5.0,
+  maxWindSpeed: 15.0,
+  averageHumidity: 80.0,
+  maxHumidity: 95.0,
+  averagePrecipitation: 600.0,
+  maxPrecipitation: 50.0,
+  maxTemperature: 25.0,
+  minTemperature: -5.0,
+  timeRangeStart: date("2023-01-01"),
+  timeRangeEnd: date("2023-12-31"),
+  position: "MULTIPOLYGON((12.5 55.6, 12.6 55.7, ...))"
+})
+
+CREATE (l3:Location {
+  mRID: "L3",
+  locationType: "Railway",
+  lengthInKm: 3.0,
+  position: "LINESTRING(10.195 56.145, 10.215 56.170)"
+})
+
+CREATE (l4:Location {
+  mRID: "L4",
+  locationType: "WaterBody",
+  position: "MULTIPOLYGON((10.190 56.140, 10.220 56.160, ...))"
+})
+
+CREATE (l5:Location {
+  mRID: "L5",
+  locationType: "SoilType",
+  soilType: "Clay",
+  position: "MULTIPOLYGON((12.540 55.680, 12.560 55.700, ...))"
+})
+
+WITH true AS dummy
+
+// Create L6 to L50 with optional WeatherCondition Measurements
+UNWIND range(6, 50) AS i
+WITH i,
+  CASE toInteger(rand() * 5)
+    WHEN 0 THEN "Road"
+    WHEN 1 THEN "Railway"
+    WHEN 2 THEN "WaterBody"
+    WHEN 3 THEN "SoilType"
+    ELSE "WeatherCondition"
+  END AS locationType,
+  CASE toInteger(rand() * 5)
     WHEN 0 THEN "LINESTRING(" + (9.8 + rand() * 3.0) + " " + (55.0 + rand() * 2.5) + ", " + (9.8 + rand() * 3.0) + " " + (55.0 + rand() * 2.5) + ")"
     WHEN 1 THEN "LINESTRING(" + (9.8 + rand() * 3.0) + " " + (55.0 + rand() * 2.5) + ", " + (9.8 + rand() * 3.0) + " " + (55.0 + rand() * 2.5) + ")"
-    ELSE "MULTIPOLYGON((" + (9.8 + rand() * 3.0) + " " + (55.0 + rand() * 2.5) + ", ...))" END,
-  node.locationAttributes = CASE toInteger(rand() * 5)
-    WHEN 0 THEN {lengthInKm: 1.0 + rand() * 5.0}
-    WHEN 1 THEN {lengthInKm: 1.0 + rand() * 5.0}
-    WHEN 3 THEN {soilType: CASE toInteger(rand() * 3) WHEN 0 THEN "Clay" WHEN 1 THEN "Sand" ELSE "Loam" END}
-    ELSE {} END
-  FOREACH (isWeather IN [CASE WHEN node.locationType = "WeatherCondition" THEN 1 ELSE 0 END] |
-    CREATE (m:Measurement {
-      mRID: "M" + i,
-      locationType: "WeatherCondition",
-      measurementValues: {
-        averageTemperature: 7.0 + rand() * 3.0,
-        averageWindSpeed: 4.0 + rand() * 3.0,
-        maxWindSpeed: 10.0 + rand() * 10.0,
-        averageHumidity: 75.0 + rand() * 20.0,
-        maxHumidity: 90.0 + rand() * 10.0,
-        averagePrecipitation: 500.0 + rand() * 400.0,
-        maxPrecipitation: 40.0 + rand() * 20.0,
-        maxTemperature: 20.0 + rand() * 10.0,
-        minTemperature: -10.0 + rand() * 5.0
-      },
-      timeRangeStart: date("2020-01-01") + duration({years: toInteger(rand() * 3)}),
-      timeRangeEnd: date("2020-01-01") + duration({years: toInteger(rand() * 3) + 1}),
-      position: "MULTIPOLYGON((" + (9.8 + rand() * 3.0) + " " + (55.0 + rand() * 2.5) + ", ...))"
-    })
-    CREATE (node)-[:HAS_MEASUREMENT]->(m)
-  )
-)
+    ELSE "MULTIPOLYGON((" + (9.8 + rand() * 3.0) + " " + (55.0 + rand() * 2.5) + ", ...))"
+  END AS position,
+  toInteger(rand() * 5) AS attrType
+
+// Create Location node
+CREATE (node:Location {
+  mRID: "L" + i,
+  locationType: locationType,
+  position: position
+})
+// Add flattened attributes
+SET node.lengthInKm = CASE WHEN locationType IN ["Road", "Railway"] THEN 1.0 + rand() * 5.0 ELSE null END
+
 
 // --- Create Relationships ---
 
@@ -286,16 +442,39 @@ MATCH (ac:AssetContainer)
 WITH ac, toInteger(rand() * 8 + 3) AS numSubsections
 MATCH (ls:ACLineSegment)
 WHERE rand() < 0.02
-LIMIT numSubsections
-CREATE (ac)-[:CONTAINS {mRID: "CT" + ac.mRID + ls.mRID, groupingDate: date("2010-01-01") + duration({years: toInteger(rand() * 10)})}]->(ls);
+WITH ac, numSubsections, collect(ls) AS allLS
+WITH ac, allLS[0..numSubsections] AS selectedLS
+UNWIND selectedLS AS ls
+CREATE (ac)-[:CONTAINS {
+  mRID: "CT" + ac.mRID + ls.mRID,
+  groupingDate: date("2010-01-01") + duration({years: toInteger(rand() * 10)})
+}]->(ls)
+
 
 // Junction JOINS ACLineSegment
-MATCH (ls1:ACLineSegment), (ls2:ACLineSegment), (j:Junction)
+MATCH (ac:AssetContainer)
+WITH ac, toInteger(rand() * 8 + 3) AS numSubsections
+
+CALL {
+  WITH ac, numSubsections
+  MATCH (ls:ACLineSegment)
+  WHERE rand() < 0.02
+  WITH ac, numSubsections, collect(ls) AS allLS
+  RETURN allLS[0..numSubsections] AS selectedLS
+}
+
+UNWIND selectedLS AS ls
+CREATE (ac)-[:CONTAINS {
+  mRID: "CT" + ac.mRID + ls.mRID,
+  groupingDate: date("2010-01-01") + duration({years: toInteger(rand() * 10)})
+}]->(ls)
+
+/* MATCH (ls1:ACLineSegment), (ls2:ACLineSegment), (j:Junction)
 WHERE ls1.mRID < ls2.mRID AND rand() < 0.01
 CREATE (t1:Terminal {mRID: "T" + j.mRID + ls1.mRID}), (t2:Terminal {mRID: "T" + j.mRID + ls2.mRID})
 CREATE (j)-[:HAS_TERMINAL]->(t1), (j)-[:HAS_TERMINAL]->(t2)
 CREATE (j)-[:JOINS {mRID: "J" + j.mRID + ls1.mRID, connectionDate: date("2010-01-01") + duration({years: toInteger(rand() * 10)}), terminalIds: [t1.mRID]}]->(ls1)
-CREATE (j)-[:JOINS {mRID: "J" + j.mRID + ls2.mRID, connectionDate: date("2010-01-01") + duration({years: toInteger(rand() * 10)}), terminalIds: [t2.mRID]}]->(ls2);
+CREATE (j)-[:JOINS {mRID: "J" + j.mRID + ls2.mRID, connectionDate: date("2010-01-01") + duration({years: toInteger(rand() * 10)}), terminalIds: [t2.mRID]}]->(ls2); */
 
 // FailureEvent/WorkOrder AFFECTS ACLineSegment/Junction
 MATCH (fe:FailureEvent), (ls:ACLineSegment)
@@ -338,78 +517,12 @@ WHERE rand() < 0.05
 CREATE (m)-[:CONTRIBUTES_TO {mRID: "CTB" + m.mRID + fe.mRID, contributionDate: fe.startTime, factorType: "WeatherCondition"}]->(fe);
 
 // --- Update Derived Properties ---
-MATCH (ac:AssetContainer)
-SET ac.numberOfSubsections = SIZE([(ac)-[:CONTAINS]->(ls) | ls]),
-    ac.totalLength = COALESCE(SUM([(ac)-[:CONTAINS]->(ls) | ls.length]), 0.0);
+MATCH (ac:AssetContainer)-[:CONTAINS]->(ls:ACLineSegment)
+WITH ac, count(ls) AS numSubsections, sum(ls.length) AS totalLength
+SET ac.numberOfSubsections = numSubsections,
+    ac.totalLength = coalesce(totalLength, 0.0);
 
-MATCH (ls:ACLineSegment)
-SET ls.numberOfJoints = SIZE([(ls)<-[:JOINS]-(:Junction) | 1]);
 
-// --- Testing Queries for Use Cases ---
-
-// Use Case 1: Which Organisation operates an AssetContainer?
-MATCH (o:Organisation)-[:OPERATES]->(ac:AssetContainer)
-RETURN o.name, ac.name
-LIMIT 10;
-
-// Use Case 3: How many failures occurred in a given year?
-MATCH (fe:FailureEvent {eventType: "CableFailure"})
-WHERE fe.startTime.year = 2023
-RETURN COUNT(fe) AS failure_count;
-
-// Use Case 4: Which Organisation had the most failures?
-MATCH (o:Organisation)-[:OPERATES]->(ac:AssetContainer)-[:CONTAINS]->(ls:ACLineSegment)<-[:AFFECTS]-(fe:FailureEvent {eventType: "CableFailure"})
-RETURN o.name, COUNT(fe) AS failure_count
-ORDER BY failure_count DESC
-LIMIT 5;
-
-// Use Case 5: What are the leading factors for most failures?
-MATCH (fe:FailureEvent {eventType: "CableFailure"})
-OPTIONAL MATCH (fe)-[:CAUSED_BY]->(ar:ActivityRecord)
-RETURN fe.cause, ar.eventType AS external_event, COUNT(*) AS failure_count
-ORDER BY failure_count DESC
-LIMIT 10;
-
-// Use Case 7: Give maintenance record for a certain component
-MATCH (ls:ACLineSegment {mRID: "LS1"})<-[:AFFECTS]-(wo:WorkOrder {eventType: "CableRepair"})
-RETURN wo.startTime, wo.workDetails, wo.relatedFailureId
-ORDER BY wo.startTime;
-
-// Use Case 9: Were certain activities reported to the responsible authorities?
-MATCH (ar:ActivityRecord {eventType: "DiggingActivity"})
-RETURN ar.mRID, ar.attributes.diggingType, ar.attributes.reportedToAuthority
-LIMIT 10;
-
-// Use Case 12: What is the coverage area of an Organisation?
-MATCH (o:Organisation)
-RETURN o.name, o.serviceRegion
-LIMIT 5;
-
-// Use Case 14: What cable types are mostly affected by digging activities?
-MATCH (ar:ActivityRecord {eventType: "DiggingActivity"})-[:IMPACTS]->(ls:ACLineSegment)-[:HAS_ASSET_INFO]->(ci:CableInfo)
-RETURN ci.conductorType, COUNT(*) AS impact_count
-ORDER BY impact_count DESC;
-
-// Use Case 15: Are there specific cable materials that lead to most of the failures?
-MATCH (ls:ACLineSegment)<-[:AFFECTS]-(fe:FailureEvent {eventType: "CableFailure"})-[:HAS_ASSET_INFO]->(ci:CableInfo)
-RETURN ci.conductorMaterial, COUNT(fe) AS failure_count
-ORDER BY failure_count DESC;
-
-// Use Case 19: What weather conditions are associated with most failures?
-MATCH (fe:FailureEvent {eventType: "CableFailure"})-[:CAUSED_BY]->(ar:ActivityRecord)
-WHERE ar.eventType IN ["Flood", "HeatWave", "ColdWave"]
-RETURN ar.eventType, ar.attributes.maxTemperature, ar.attributes.maxPrecipitation, COUNT(*) AS failure_count
-ORDER BY failure_count DESC;
-
-// Use Case 20: Do cables with many joints fail more than those with few joints?
-MATCH (ls:ACLineSegment)
-OPTIONAL MATCH (ls)<-[:AFFECTS]-(fe:FailureEvent {eventType: "CableFailure"})
-RETURN ls.numberOfJoints, COUNT(fe) AS failure_count
-ORDER BY ls.numberOfJoints
-LIMIT 20;
-
-// Use Case 21: What distance of the cable system was affected?
-MATCH (ac:AssetContainer)-[:CONTAINS]->(ls:ACLineSegment)<-[:AFFECTS]-(fe:FailureEvent {eventType: "CableFailure"})
-RETURN ac.name, SUM(ls.length) AS affected_length_km
-ORDER BY affected_length_km DESC
-LIMIT 10;
+MATCH (ls:ACLineSegment)<-[:JOINS]-(j:Junction)
+WITH ls, count(j) AS jointCount
+SET ls.numberOfJoints = jointCount;
