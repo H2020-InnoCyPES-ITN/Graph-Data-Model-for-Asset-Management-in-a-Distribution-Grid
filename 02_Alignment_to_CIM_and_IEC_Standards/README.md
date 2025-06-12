@@ -38,7 +38,7 @@ This alignment enables interoperability with CIM-compliant utility systems while
 
 ## Usage
 
-The provided Cypher code (see [CYPHER CODE](/02_2_graph_model_cim_iec_standard.cypher)) implements the model in Neo4j, including:
+The provided Cypher code (see [CYPHER CODE](/02_Alignment_to_CIM_and_IEC_Standards/02_2_graph_model_cim_iec_standard.cypher)) implements the model in Neo4j, including:
 - **Constraints and Indexes**: Ensure unique identifiers (`mRID`) and optimize query performance.
 - **Sample Data**: Includes 5 DSOs, 50 substations, 100 asset containers, 500 cable subsections, 300 joints, 200 failures, 150 repairs, and 100 external events, covering Danish power networks.
 - **Relationships**: Establishes CIM-aligned connections for topology, fault, and maintenance analysis.
