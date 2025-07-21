@@ -1,9 +1,9 @@
 # Graph Model based on CIM/IEC
-This folder present a refined graph data model to align with CIM/IEC standards. This is done by considering major critical components that has been documented in the standards. To better model data for the reliability of the MV cable network and failure data, a combination of three datasets is needed. First, since we track the failure of cables, asset records are required (as specified in IEC 61968-4). Second, components will be maintained, repaired, and some will be built. In such cases, maintenance and construction records (as specified in IEC 61968-6) are required. Third, the cable system is connected through substations, which have joints or junctions, and subsections that belong to IEC 61968-11. Hence, our graph data model will take into consideration these standards to ensure correctness and support scalability. Three files are presented, detailed descriotions of how previous graph model is aligned to CIM/IEC, the CYPHER model to implement the proposal and basic queries to fetch the stored data.
+This folder present a refined graph data model to align with CIM/IEC standards. This is done by considering major critical components that has been documented in the standards. To better model data for the reliability of the MV cable network and failure data, a combination of three IEC profiles is needed. First, since we track the failure of cables, asset records are required (as specified in IEC 61968-4). Second, components will be maintained, repaired, and some will be built. In such cases, maintenance and construction records (as specified in IEC 61968-6) are required. Third, the cable system is connected through substations, which have joints or junctions, and subsections that belong to IEC 61968-11. Hence, our graph-based data model takes into consideration these standards to ensure correctness and support scalability. Three files are presented, (i) detailed descriptions of how previous graph-based model is refined to align with CIM/IEC, (ii) the CYPHER model to implement the proposal and (iii) basic queries to fetch the stored data.
 
 ## Overview
 
-This repository provides a graph database model for power system cable networks, tailored for DSOs. The model supports critical use cases, including fault analysis, maintenance tracking, and network topology management, and hence facilitating efficient querying of complex relationships in low- and medium-voltage cable systems. Initially designed for agility, the model has been refined to align with the CIM/IEC 61968 standards (Parts 4, 6, and 11) to ensure interoperability with utility systems while leveraging the strengths of graph databases for relationship-driven analysis.
+We target power system cable networks, tailored for DSOs. The model supports critical use cases, including fault analysis, maintenance tracking, and network topology management, and hence facilitating efficient querying of complex relationships in medium-voltage cable systems (can easily accomodate low voltage cables). Initially designed for agility, the model has been refined to align with the CIM/IEC 61968 standards to ensure interoperability with utility systems while benefiting from the strengths of graph databases for relationship-driven analysis.
 
 ## Model Description
 
@@ -39,8 +39,8 @@ This alignment enables interoperability with CIM-compliant utility systems while
 ## Usage
 
 The provided Cypher code (see [CYPHER CODE](/02_Alignment_to_CIM_and_IEC_Standards/02_2_graph_model_cim_iec_standard.cypher)) implements the model in Neo4j, including:
-- **Constraints and Indexes**: Ensure unique identifiers (`mRID`) and optimize query performance.
-- **Sample Data**: Includes 5 DSOs, 50 substations, 100 asset containers, 500 cable subsections, 300 joints, 200 failures, 150 repairs, and 100 external events, covering Danish power networks.
+- **Constraints and Indexes**: ensuring that assets are uniquely identified using (`mRID`). This also helps to optimise query performance.
+- **Sample Data**: The code loads 5 DSOs, 50 substations, 100 asset containers, 500 cable subsections, 300 joints, 200 failures, 150 repairs, and 100 external events. This is all synthetic data.
 - **Relationships**: Establishes CIM-aligned connections for topology, fault, and maintenance analysis.
 - **Testing Queries**: Supports use cases like identifying DSO-operated systems, analysing failure causes, and tracking maintenance records.
 
