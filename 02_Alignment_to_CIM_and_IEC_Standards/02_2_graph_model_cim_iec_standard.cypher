@@ -253,3 +253,69 @@ MATCH (ls:ACLineSegment)
 OPTIONAL MATCH (ls)<-[:JOINS]-(j:Junction)
 WITH ls, count(j) AS jointCount
 SET ls.numberOfJoints = jointCount;
+
+
+// Part 1: Connect each FailureEvent to its single closest asset.
+// This query iterates through each failure and, for each one, finds the
+// closest ACLineSegment OR Junction and creates an AFFECTS relationship.
+MATCH (fe:FailureEvent)
+CALL {
+    WITH fe
+    // Find the closest line segment
+    MATCH (ls:ACLineSegment)
+    WITH fe, ls, point.distance(fe.location, ls.location) AS dist
+    ORDER BY dist ASC
+    LIMIT 1
+    RETURN ls AS asset, dist
+
+    UNION
+
+    WITH fe
+    // Find the closest junction
+    MATCH (j:Junction)
+    WITH fe, j, point.distance(fe.location, j.location) AS dist
+    ORDER BY dist ASC
+    LIMIT 1
+    RETURN j AS asset, dist
+}
+// From the two candidates (closest segment and closest junction), pick the one with the smallest distance
+WITH fe, asset, dist
+ORDER BY dist ASC
+LIMIT 1
+// Create the relationship to the overall closest asset
+MERGE (fe)-[r:AFFECTS]->(asset)
+SET r.eventDate = fe.startTime,
+    r.mRID = "AF_" + fe.mRID + asset.mRID;
+
+// Part 2: Connect WorkOrders to the same asset affected by the failure they repair.
+// This ensures consistency, as a repair is performed on the asset that failed.
+MATCH (wo:WorkOrder)-[:REPAIRS]->(fe:FailureEvent)-[:AFFECTS]->(asset)
+MERGE (wo)-[r:AFFECTS]->(asset)
+SET r.eventDate = wo.startTime,
+    r.mRID = "AF_" + wo.mRID + asset.mRID;
+
+
+// THis refines the model to populate data on AFFECTS relationship.
+// It loads about 60,000 relationships in total.
+
+
+// Define the search radius once for the entire query
+WITH 2500 AS radius
+
+// Use a subquery to find all assets (segments and junctions) within the radius for each failure
+CALL {
+    WITH radius
+    MATCH (fe:FailureEvent), (ls:ACLineSegment)
+    WHERE point.distance(fe.location, ls.location) < radius
+    RETURN fe, ls AS asset
+
+    UNION
+
+    WITH radius
+    MATCH (fe:FailureEvent), (j:Junction)
+    WHERE point.distance(fe.location, j.location) < radius
+    RETURN fe, j AS asset
+}
+// For each pair of (failure, asset) found, create the AFFECTS relationship
+MERGE (fe)-[r:AFFECTS]->(asset)
+SET r.eventDate = fe.startTime

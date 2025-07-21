@@ -3,8 +3,7 @@
 
 ## Use Case 1: Which Organisation operates an AssetContainer?
 MATCH (o:Organisation)-[:OPERATES]->(ac:AssetContainer)
-RETURN o.name, ac.name
-LIMIT 10;
+RETURN o.name, ac.name;
 
 ## Use Case 3: How many failures occurred in a given year?
 MATCH (fe:FailureEvent {eventType: "CableFailure"})
@@ -12,10 +11,24 @@ WHERE fe.startTime.year = 2023
 RETURN COUNT(fe) AS failure_count;
 
 ## Use Case 4: Which Organisation had the most failures?
-MATCH (o:Organisation)-[:OPERATES]->(ac:AssetContainer)-[:CONTAINS]->(ls:ACLineSegment)<-[:AFFECTS]-(fe:FailureEvent {eventType: "CableFailure"})
-RETURN o.name, COUNT(fe) AS failure_count
-ORDER BY failure_count DESC
-LIMIT 5;
+// Use a subquery to find all failures and their responsible organization
+CALL () {
+    // Path 1: Find failures that affect ACLineSegments
+    MATCH (o:Organisation)-[:OPERATES]->(:AssetContainer)-[:CONTAINS]->(:ACLineSegment)<-[:AFFECTS]-(fe:FailureEvent)
+    RETURN o, fe
+    
+    UNION
+
+    // Path 2: Find failures that affect Junctions
+    MATCH (o:Organisation)-[:OPERATES]->(:AssetContainer)-[:CONTAINS]->(:ACLineSegment)<-[:JOINS]-(:Junction)<-[:AFFECTS]-(fe:FailureEvent)
+    RETURN o, fe
+}
+// Aggregate the results from both paths to get the final count
+RETURN
+    o.name AS Organisation,
+    count(DISTINCT fe) AS NumberOfFailures
+ORDER BY NumberOfFailures DESC
+LIMIT 1
 
 ## Use Case 5: What are the leading factors for most failures?
 MATCH (fe:FailureEvent {eventType: "CableFailure"})
