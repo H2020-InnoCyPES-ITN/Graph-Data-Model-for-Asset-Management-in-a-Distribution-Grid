@@ -6,6 +6,18 @@
  * It also establishes relationships between these nodes while ensuring data integrity and performance.
  */
 
+/*
+*
+*
+It contains: 5 organisations, 50 substations, 100 asset containers, 500 AC line segments, 300 junctions, 300 assets, 200 failure events, 200 work orders, 100 activity records, 100 locations, 100 measurements, 100 cable info nodes, 100 joint info nodes, 50 voltage levels, 100 measurement values, 100 terminals, 1000 relationships between nodes
+ 
+The model is designed to be efficient and scalable, with constraints and indexes to ensure data integrity and performance. The script uses Cypher queries to create nodes and relationships, leveraging the UNWIND clause for batch processing and MERGE to avoid duplicates. The relationships are created based on logical connections between the entities, such as organisations operating substations, asset containers containing AC line segments, and failure events affecting assets.
+ 
+The model is suitable for asset management in a distribution grid, allowing for efficient querying and analysis of the data. The script is designed to be run in a Neo4j environment with APOC procedures available for random data generation and spatial functions. The model can be extended or modified to include additional entities or relationships as needed. The script is structured to be modular, with sections for creating constraints and indexes, creating nodes, and creating relationships, making it easy to maintain and update.
+ 
+The use of random data generation ensures that the model can be tested with realistic scenarios, while the constraints and indexes ensure that the data remains consistent and performant. The model is aligned with CIM and IEC standards, providing a solid foundation for asset management in a distribution grid.
+*/
+
 // --- 1. Create Constraints and Indexes ---
 // Constraints ensure data integrity by enforcing unique identifiers.
 CREATE CONSTRAINT IF NOT EXISTS FOR (o:Organisation) REQUIRE o.mRID IS UNIQUE;
