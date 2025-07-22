@@ -1,23 +1,18 @@
 -- =================================================================
--- FINAL, CORRECTED DATABASE SETUP SCRIPT (v4)
--- This version corrects a column aliasing error during data generation.
--- It will:
--- 1. ENABLE the PostGIS extension.
--- 2. DROP all existing tables for a clean slate.
--- 3. CREATE the complete schema.
--- 4. ADD all constraints.
--- 5. GENERATE and LOAD a large, realistic dataset.
+-- FINAL DATABASE SETUP SCRIPT
+-- The BEGIN command starts a transaction block. If any statement
+-- fails before the COMMIT, all changes are automatically rolled back.
 -- =================================================================
 
-BEGIN;
+BEGIN; -- Starts the transaction. All subsequent commands are part of this block.
 
 -- ---------------------------------------
--- SECTION 0: ENABLE EXTENSIONS 
+-- SECTION 0: ENABLE EXTENSIONS 🚀
 -- ---------------------------------------
 CREATE EXTENSION IF NOT EXISTS postgis;
 
 -- ---------------------------------------
--- SECTION 1: CLEAN UP 
+-- SECTION 1: CLEAN UP 🧹
 -- ---------------------------------------
 DROP TABLE IF EXISTS dso CASCADE;
 DROP TABLE IF EXISTS medium_voltage_radial CASCADE;
@@ -34,7 +29,7 @@ DROP TABLE IF EXISTS digging_activities CASCADE;
 
 
 -- ---------------------------------------
--- SECTION 2: CREATE TABLES (SCHEMA DEFINITION) 
+-- SECTION 2: CREATE TABLES (SCHEMA DEFINITION) 🏗️
 -- ---------------------------------------
 CREATE TABLE dso (
     id INTEGER NOT NULL,
@@ -140,7 +135,7 @@ CREATE TABLE digging_activities (
 );
 
 -- ---------------------------------------
--- SECTION 3: ADD CONSTRAINTS (PRIMARY & FOREIGN KEYS) 
+-- SECTION 3: ADD CONSTRAINTS (PRIMARY & FOREIGN KEYS) 🔗
 -- ---------------------------------------
 ALTER TABLE dso ADD PRIMARY KEY (id);
 ALTER TABLE medium_voltage_radial ADD PRIMARY KEY (id);
@@ -172,10 +167,8 @@ ALTER TABLE cable_repairs ADD CONSTRAINT fk_cablerepairs_failures FOREIGN KEY (f
 ALTER TABLE digging_activities ADD CONSTRAINT fk_digging_events FOREIGN KEY (id) REFERENCES external_events(id) ON DELETE CASCADE;
 
 -- ---------------------------------------
--- SECTION 4: DATA GENERATION AND POPULATION 
+-- SECTION 4: DATA GENERATION AND POPULATION 📈
 -- ---------------------------------------
--- 4.1: Core Infrastructure
--------------------------------------------------------------------
 INSERT INTO dso (id, name, cvr, geometry)
 SELECT
     i AS id,
@@ -207,15 +200,10 @@ SELECT
 FROM temp_substation
 WHERE station_class = 'secondary_substation';
 
-
--- 4.2: Cables & Radials
--------------------------------------------------------------------
 INSERT INTO medium_voltage_radial (id, name, load_embeddings, max_loading, median_loading, upper_quartile_loading)
 SELECT i, 'Radial-' || (random()*1000)::int, array(SELECT random() FROM generate_series(1,8)), random()*30+70, random()*20+40, random()*20+60
 FROM generate_series(1, 50) i;
 
--- ** FIX **
--- The column `i` is now correctly aliased as `id`.
 CREATE TEMP TABLE temp_mv_cable_system AS
 SELECT
     i AS id,
@@ -244,9 +232,6 @@ SELECT
     geometry
 FROM temp_mv_cable_system;
 
-
--- 4.3: Mass Failure Event 
--------------------------------------------------------------------
 INSERT INTO external_events (id, start_date, end_date, external_event_type) VALUES (99999, '2025-07-15', '2025-07-25', 'digging_activity');
 INSERT INTO digging_activities(id, diggingType, geometry) VALUES (99999, 'City Metro Expansion', ST_SetSRID(ST_GeomFromText('POLYGON((12.55 55.65, 12.60 55.65, 12.60 55.70, 12.55 55.70, 12.55 55.65))'), 4326));
 
@@ -268,4 +253,4 @@ SELECT gf.id, 'RPT-25-'||(1000+gf.id), CASE WHEN random()>0.1 THEN 'Excavation d
 FROM temp_generated_failures gf;
 
 
-COMMIT;
+COMMIT; -- Attempts to save all changes. If any command above failed, this will fail and automatically trigger a ROLLBACK.
